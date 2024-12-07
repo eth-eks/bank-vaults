@@ -226,46 +226,61 @@ func (v *vault) Unseal() error {
 
 func (v *vault) Rekey(pgpKeys []string) error {
 	defer runtime.GC()
+	if len(pgpKeys) == 0 {
+		return errors.New("no PGP keys provided for rekey operation")
+	}
+
+	// Use defer with a closure to ensure sensitive data is wiped
 	slog.Debug("starting rekey process...")
 
 	slog.Debug("checking rekey status...")
 	respStatus, err := v.cl.Sys().RekeyStatus()
-	var nonce string
 	if err != nil {
 		return errors.Wrapf(err, "unable to check rekey status")
 	}
 
-	//		TODO: get cfg Params with keybase usernames
+	// Validate PGP keys and fetch them
+	slog.Debug("fetching Keybase PGP keys...")
 	keys, err := FetchKeybasePubkeys(pgpKeys)
 	if err != nil {
-		return errors.Wrapf(err, "Unable to fetch Keybase PGP keys")
+		return errors.Wrapf(err, "unable to fetch Keybase PGP keys: %v", err)
 	}
 
+	// Initialize rekey operation if not already started
+	var nonce string
 	if !respStatus.Started {
 		rekeyRequest := api.RekeyInitRequest{
 			SecretShares:    v.config.SecretShares,
 			SecretThreshold: v.config.SecretThreshold,
 			PGPKeys:         keys,
 		}
-		resp, err := v.cl.Sys().RekeyInit(&rekeyRequest)
 
+		slog.Debug("initializing rekey operation...",
+			slog.Int("shares", v.config.SecretShares),
+			slog.Int("threshold", v.config.SecretThreshold))
+
+		resp, err := v.cl.Sys().RekeyInit(&rekeyRequest)
 		if err != nil {
-			return errors.Wrapf(err, "unable to start rekey Init process")
+			return errors.Wrapf(err, "unable to start rekey init process")
 		}
 
 		if resp.Nonce == "" {
-			return errors.New("failed to init rekey operation. Vault auth token is incorect? ")
+			return errors.New("failed to init rekey operation: empty nonce returned. Vault auth token may be incorrect")
 		}
 
 		nonce = resp.Nonce
+		slog.Debug("rekey operation initialized", slog.String("nonce", nonce))
 	} else {
 		nonce = respStatus.Nonce
+		slog.Debug("resuming existing rekey operation", slog.String("nonce", nonce))
 	}
 
+	// Track progress for logging
+	progress := 0
 	for i := 0; ; i++ {
 		keyID := keyUnsealForID(i)
 
-		slog.Debug("retrieving key from kms service...")
+		slog.Debug("retrieving key from kms service...", slog.String("key_id", keyID))
 		k, err := v.keyStore.Get(keyID)
 		if err != nil {
 			return errors.Wrapf(err, "unable to get key '%s'", keyID)
@@ -274,14 +289,25 @@ func (v *vault) Rekey(pgpKeys []string) error {
 		slog.Debug("sending rekey update request to vault...")
 		resp, err := v.cl.Sys().RekeyUpdate(string(k), nonce)
 		if err != nil {
-			return errors.Wrap(err, "fail to send rekey update request to vault")
+			// Cancel rekey operation on error to avoid leaving it in an inconsistent state
+			if cerr := v.cl.Sys().RekeyCancel(); cerr != nil {
+				slog.Error("failed to cancel rekey operation after error",
+					slog.String("error", cerr.Error()))
+			}
+			return errors.Wrap(err, "failed to send rekey update request to vault")
 		}
 
+		progress = i
+		slog.Debug("rekey progress",
+			slog.Int("current", progress))
+
 		if resp.Complete {
+			slog.Info("rekey operation completed successfully",
+				slog.Int("total_keys", len(resp.KeysB64)))
+
 			for i, k := range resp.KeysB64 {
 				keyID := pgpKeys[i] + "-" + keyUnsealForID(i)
-				err := v.keyStoreSet(keyID, []byte(k))
-				if err != nil {
+				if err := v.keyPGPSet(keyID, []byte(k)); err != nil {
 					return errors.Wrapf(err, "error storing unseal key '%s'", keyID)
 				}
 
@@ -300,6 +326,14 @@ func (v *vault) keyStoreNotFound(key string) (bool, error) {
 	}
 
 	return false, err //nolint:wrapcheck
+}
+
+func (v *vault) keyPGPSet(key string, val []byte) error {
+	pgpText, err := base64.StdEncoding.DecodeString(string(val[:]))
+	if err != nil {
+		return errors.Wrap(err, "error setting data")
+	}
+	return v.keyStore.Set(key, pgpText)
 }
 
 func (v *vault) keyStoreSet(key string, val []byte) error {

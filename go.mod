@@ -34,6 +34,12 @@ require (
 )
 
 require (
+	github.com/cloudflare/circl v1.3.3 // indirect
+	github.com/golang/snappy v0.0.4 // indirect
+	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
+)
+
+require (
 	cloud.google.com/go v0.114.0 // indirect
 	cloud.google.com/go/auth v0.4.2 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.2 // indirect
@@ -52,6 +58,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/ProtonMail/go-crypto v1.0.0
 	github.com/aws/aws-sdk-go-v2 v1.26.1 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.6.2 // indirect
 	github.com/aws/aws-sdk-go-v2/config v1.27.11 // indirect
@@ -113,6 +120,7 @@ require (
 	github.com/hashicorp/vault/api/auth/azure v0.5.0 // indirect
 	github.com/hashicorp/vault/api/auth/gcp v0.6.0 // indirect
 	github.com/hashicorp/vault/api/auth/kubernetes v0.6.0 // indirect
+	github.com/hashicorp/vault/sdk v0.13.0
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect

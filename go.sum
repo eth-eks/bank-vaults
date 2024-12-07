@@ -1015,6 +1015,8 @@ github.com/hashicorp/vault/api/auth/gcp v0.6.0 h1:Pzr++gLytXFAzwUrkMLSWgpD2ueN6n
 github.com/hashicorp/vault/api/auth/gcp v0.6.0/go.mod h1:gMVTWemzXIEyIu6uXwZGJlC/9VAhccKBjrGlZCOLXMc=
 github.com/hashicorp/vault/api/auth/kubernetes v0.6.0 h1:K8sKGhtTAqGKfzaaYvUSIOAqTOIn3Gk1EsCEAMzZHtM=
 github.com/hashicorp/vault/api/auth/kubernetes v0.6.0/go.mod h1:Htwcjez5J9PwAHaZ1EYMBlgGq3/in5ajUV4+WCPihPE=
+github.com/hashicorp/vault/sdk v0.13.0 h1:UmcLF+7r70gy1igU44Suflgio30P2GOL4MkHPhJuiP8=
+github.com/hashicorp/vault/sdk v0.13.0/go.mod h1:LxhNTWRG99mXg9xijBCnCnIus+brLC5uFsQUQ4zgOnU=
 github.com/huandu/xstrings v1.3.3/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
 github.com/huandu/xstrings v1.4.0 h1:D17IlohoQq4UcpqD7fDk80P7l+lwAmlFaBHgOipl2FU=
 github.com/huandu/xstrings v1.4.0/go.mod h1:y5/lhBue+AyNmUVz9RLU9xbLR0o4KIIExikq4ovT0aE=
@@ -1271,6 +1273,7 @@ golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa/go.mod h1:GvvjBRRGRdwPK5y
 golang.org/x/crypto v0.3.0/go.mod h1:hebNnKkNXi2UzZN1eVRvBB7co0a+JxK6XbPiWVs/3J4=
 golang.org/x/crypto v0.3.1-0.20221117191849-2c476679df9a/go.mod h1:hebNnKkNXi2UzZN1eVRvBB7co0a+JxK6XbPiWVs/3J4=
 golang.org/x/crypto v0.6.0/go.mod h1:OFC/31mSvZgRz0V1QTNCzfAI1aIRzbiufJtkMIlEp58=
+golang.org/x/crypto v0.7.0/go.mod h1:pYwdfH91IfpZVANVyUOhSIPZaFoJGxTFbZhFTx+dXZU=
 golang.org/x/crypto v0.13.0/go.mod h1:y6Z2r+Rw4iayiXXAIxJIDAJ1zMW4yaTpebo8fPOliYc=
 golang.org/x/crypto v0.14.0/go.mod h1:MVFd36DqK4CsrnJYDkBA3VC4m2GkXAM0PvzMCn4JQf4=
 golang.org/x/crypto v0.17.0/go.mod h1:gCAAfMLgwOJRpTjQ2zCCt2OcSfYMTeZVSRtQlPC7Nq4=
