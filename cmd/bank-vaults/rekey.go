@@ -74,12 +74,23 @@ Resulting keys will be encrypted by Keybase PGP`,
 		}
 
 		for {
-			rekey(rekeyConfig, v)
-
+			if newKeysNotExists(rekeyConfig, v) {
+				rekey(rekeyConfig, v)
+			}
 			// wait retryPerios before trying again
 			time.Sleep(rekeyConfig.rekeyRetryPeriod)
 		}
 	},
+}
+
+func newKeysNotExists(rekeyConfig rekeyCfg, v internalVault.Vault) bool {
+	slog.Debug("checking if unseal keys already exist...")
+	exists, err := v.NewUnsealKeysExists(strings.Split(rekeyConfig.pgpKeys, ","))
+	if err != nil {
+		slog.Error(fmt.Sprintf("error checking if unseal keys already exist: %s", err.Error()))
+		os.Exit(1)
+	}
+	return !exists
 }
 
 func rekey(rekeyConfig rekeyCfg, v internalVault.Vault) {
@@ -100,13 +111,11 @@ func rekey(rekeyConfig rekeyCfg, v internalVault.Vault) {
 			return
 		}
 		slog.Info("successfully rekeyed vault")
-
-		os.Exit(0)
 	}
 }
 
 func init() {
 	configStringVar(rekeyCmd, cfgPgpKeys, "", "Coma separated list of pgp keys")
-
+	configDurationVar(rekeyCmd, cfgRekeyRetryPeriod, 10*time.Second, "Retry period for rekeying")
 	rootCmd.AddCommand(rekeyCmd)
 }
