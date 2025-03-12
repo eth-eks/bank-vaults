@@ -18,18 +18,17 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/bank-vaults/vault-sdk/vault"
 	"github.com/spf13/cobra"
 
-	"strings"
-
 	internalVault "github.com/bank-vaults/bank-vaults/internal/vault"
 )
 
 const (
-	cfgRekeyRetryPeriod = "init"
+	cfgRekeyRetryPeriod = "rekey-retry-period"
 	cfgPgpKeys          = "pgp-keys"
 )
 
@@ -60,58 +59,58 @@ Resulting keys will be encrypted by Keybase PGP`,
 			slog.Error(fmt.Sprintf("error creating kv store: %s", err.Error()))
 			os.Exit(1)
 		}
-		slog.Debug("created kv store")
+		slog.Info("created kv store")
 
 		cl, err := vault.NewRawClient()
 		if err != nil {
 			slog.Error(fmt.Sprintf("error connecting to vault: %s", err.Error()))
 			os.Exit(1)
 		}
-		slog.Debug("connected to vault")
+		slog.Info("connected to vault")
 
 		v, err := internalVault.New(store, cl, vaultConfigForConfig(c))
 		if err != nil {
 			slog.Error(fmt.Sprintf("error creating vault helper: %s", err.Error()))
 			os.Exit(1)
 		}
-		slog.Debug("created vault helper")
+		slog.Info("created vault helper")
 
 		for {
-			slog.Debug("checking if unseal keys already exist...")
+			slog.Info("checking if unseal keys already exist...")
 			if newKeysNotExists(rekeyConfig, v) {
-				slog.Debug("unseal keys do not exist, rekeying")
+				slog.Info("unseal keys do not exist, rekeying")
 				rekey(rekeyConfig, v)
 			}
 			// wait retryPerios before trying again
-			slog.Debug("waiting for retry period", "retryPeriod", rekeyConfig.rekeyRetryPeriod)
+			slog.Info("waiting for retry period", "retryPeriod", rekeyConfig.rekeyRetryPeriod)
 			time.Sleep(rekeyConfig.rekeyRetryPeriod)
 		}
 	},
 }
 
 func newKeysNotExists(rekeyConfig rekeyCfg, v internalVault.Vault) bool {
-	slog.Debug("checking if unseal keys already exist...")
+	slog.Info("checking if unseal keys already exist...")
 	exists, err := v.NewUnsealKeysExists(strings.Split(rekeyConfig.pgpKeys, ","))
 	if err != nil {
 		slog.Error(fmt.Sprintf("error checking if unseal keys already exist: %s", err.Error()))
 		os.Exit(1)
 	}
-	slog.Debug("unseal keys already exist")
+	slog.Info("unseal keys already exist")
 	return !exists
 }
 
 func rekey(rekeyConfig rekeyCfg, v internalVault.Vault) {
-	slog.Debug("checking if vault is sealed...")
+	slog.Info("checking if vault is sealed...")
 	sealed, err := v.Sealed()
 	if err != nil {
 		slog.Error(fmt.Sprintf("error checking if vault is sealed: %s", err.Error()))
 		os.Exit(1)
 		return
 	}
-	slog.Debug("vault is sealed")
+	slog.Info("vault is sealed")
 
 	if !sealed {
-		slog.Debug("vault is not sealed, rekeying")
+		slog.Info("vault is not sealed, rekeying")
 
 		if err = v.Rekey(strings.Split(rekeyConfig.pgpKeys, ",")); err != nil {
 			slog.Error(fmt.Sprintf("error rekeying vault: %s", err.Error()))
@@ -119,6 +118,10 @@ func rekey(rekeyConfig rekeyCfg, v internalVault.Vault) {
 			return
 		}
 		slog.Info("successfully rekeyed vault")
+		for {
+			time.Sleep(1 * time.Second)
+			slog.Info("Waiting for process to be shutted down...")
+		}
 	}
 }
 

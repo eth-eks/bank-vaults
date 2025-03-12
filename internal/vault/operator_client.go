@@ -200,19 +200,19 @@ func (v *vault) Unseal() error {
 	for i := 0; ; i++ {
 		keyID := keyUnsealForID(i)
 
-		slog.Debug("retrieving key from kms service...")
+		slog.Info("retrieving key from kms service...")
 		k, err := v.keyStore.Get(keyID)
 		if err != nil {
 			return errors.Wrapf(err, "unable to get key '%s'", keyID)
 		}
 
-		slog.Debug("sending unseal request to vault...")
+		slog.Info("sending unseal request to vault...")
 		resp, err := v.cl.Sys().Unseal(string(k))
 		if err != nil {
 			return errors.Wrap(err, "fail to send unseal request to vault")
 		}
 
-		slog.Debug(fmt.Sprintf("got unseal response: %+v", *resp))
+		slog.Info(fmt.Sprintf("got unseal response: %+v", *resp))
 
 		if !resp.Sealed {
 			return nil
@@ -230,7 +230,7 @@ func (v *vault) NewUnsealKeysExists(pgpKeys []string) (bool, error) {
 		return false, nil
 	}
 	// Check for first keybase key with format "keybase:username-vault-unseal-0"
-	slog.Debug("checking if unseal key exists", slog.String("pgp_key", pgpKeys[0]))
+	slog.Info("checking if unseal key exists", slog.String("pgp_key", pgpKeys[0]))
 	notFound, checkErr := v.keyStoreNotFound(pgpKeys[0] + "-" + keyUnsealForID(0))
 	if checkErr != nil {
 		return false, errors.Wrap(checkErr, "error checking key existence")
@@ -251,17 +251,16 @@ func (v *vault) Rekey(pgpKeys []string) error {
 		}
 	}()
 
-	slog.Debug("starting rekey process...")
+	slog.Info("starting rekey process...")
 
-	slog.Debug("checking rekey status...")
+	slog.Info("checking rekey status...")
 	respStatus, err := v.cl.Sys().RekeyStatus()
 	if err != nil {
 		return errors.Wrapf(err, "unable to check rekey status")
 	}
 
-	// Validate PGP keys and fetch them
-	slog.Debug("fetching Keybase PGP keys...")
-	keys, err := FetchKeybasePubkeys(pgpKeys)
+	slog.Info("fetching Keybase PGP keys...")
+	keybaseKeys, err := FetchKeybasePubkeys(pgpKeys)
 	if err != nil {
 		return errors.Wrapf(err, "unable to fetch Keybase PGP keys: %v", err)
 	}
@@ -269,13 +268,13 @@ func (v *vault) Rekey(pgpKeys []string) error {
 	// Initialize rekey operation if not already started
 	var nonce string
 	if !respStatus.Started {
-		nonce, err = v.initializeRekey(keys)
+		nonce, err = v.initializeRekey(keybaseKeys)
 		if err != nil {
 			return err
 		}
 	} else {
 		nonce = respStatus.Nonce
-		slog.Debug("resuming existing rekey operation", slog.String("nonce", nonce))
+		slog.Info("resuming existing rekey operation", slog.String("nonce", nonce))
 	}
 
 	// Send rekey updates until complete
@@ -288,16 +287,17 @@ func (v *vault) Rekey(pgpKeys []string) error {
 	return v.finishRekey(resp, pgpKeys)
 }
 
-func (v *vault) initializeRekey(keys []string) (string, error) {
+func (v *vault) initializeRekey(pgpKeys []string) (string, error) {
 	rekeyRequest := api.RekeyInitRequest{
 		SecretShares:    v.config.SecretShares,
 		SecretThreshold: v.config.SecretThreshold,
-		PGPKeys:         keys,
+		PGPKeys:         pgpKeys,
 	}
 
-	slog.Debug("initializing rekey operation...",
+	slog.Info("initializing rekey operation...",
 		slog.Int("shares", v.config.SecretShares),
-		slog.Int("threshold", v.config.SecretThreshold))
+		slog.Int("threshold", v.config.SecretThreshold),
+		slog.Any("pgpKeys", pgpKeys))
 
 	resp, err := v.cl.Sys().RekeyInit(&rekeyRequest)
 	if err != nil {
@@ -308,7 +308,7 @@ func (v *vault) initializeRekey(keys []string) (string, error) {
 		return "", errors.New("failed to init rekey operation: empty nonce returned. Vault auth token may be incorrect")
 	}
 
-	slog.Debug("rekey operation initialized", slog.String("nonce", resp.Nonce))
+	slog.Info("rekey operation initialized", slog.String("nonce", resp.Nonce))
 	return resp.Nonce, nil
 }
 
@@ -317,13 +317,13 @@ func (v *vault) sendRekeyUpdates(nonce string) (*api.RekeyUpdateResponse, error)
 	for i := 0; ; i++ {
 		keyID := keyUnsealForID(i)
 
-		slog.Debug("retrieving key from kms service...", slog.String("key_id", keyID))
+		slog.Info("retrieving key from kms service...", slog.String("key_id", keyID))
 		k, err := v.keyStore.Get(keyID)
 		if err != nil {
 			return nil, errors.Wrapf(err, "unable to get key '%s'", keyID)
 		}
 
-		slog.Debug("sending rekey update request to vault...")
+		slog.Info("sending rekey update request to vault...")
 		resp, err := v.cl.Sys().RekeyUpdate(string(k), nonce)
 		if err != nil {
 			// Cancel rekey operation on error to avoid leaving it in an inconsistent state
@@ -334,7 +334,7 @@ func (v *vault) sendRekeyUpdates(nonce string) (*api.RekeyUpdateResponse, error)
 			return nil, errors.Wrap(err, "failed to send rekey update request to vault")
 		}
 
-		slog.Debug("rekey progress",
+		slog.Info("rekey progress",
 			slog.Int("current", i))
 
 		if resp.Complete {
@@ -343,12 +343,11 @@ func (v *vault) sendRekeyUpdates(nonce string) (*api.RekeyUpdateResponse, error)
 	}
 }
 
-func (v *vault) finishRekey(resp *api.RekeyUpdateResponse, pgpKeys []string) error {
-	slog.Info("rekey operation completed successfully",
-		slog.Int("total_keys", len(resp.KeysB64)))
+func (v *vault) finishRekey(resp *api.RekeyUpdateResponse, pgpKeyNames []string) error {
+	slog.Info("rekey operation completed successfully", slog.Int("total_keys", len(resp.KeysB64)))
 
 	for i, k := range resp.KeysB64 {
-		keyID := pgpKeys[i] + "-" + keyUnsealForID(i)
+		keyID := pgpKeyNames[i] + "-" + keyUnsealForID(i)
 		if err := v.keyPGPSet(keyID, []byte(k)); err != nil {
 			return errors.Wrapf(err, "error storing unseal key '%s'", keyID)
 		}
@@ -601,7 +600,7 @@ func (v *vault) RaftJoin(leaderAPIAddr string) error {
 func (v *vault) Configure(config map[string]interface{}) error {
 	var rootToken []byte
 
-	slog.Debug("retrieving key from kms service...")
+	slog.Info("retrieving key from kms service...")
 
 	if v.config.StoreRootToken {
 		rootToken, err := v.keyStore.Get(keyRootToken)
@@ -615,7 +614,7 @@ func (v *vault) Configure(config map[string]interface{}) error {
 		var encodedRootToken string
 		var OTPLength int
 
-		slog.Debug("initiating generate-root token process...")
+		slog.Info("initiating generate-root token process...")
 
 		// Cancel any inflight root token generation that is a remnant from a previous attempt
 		err := v.cl.Sys().GenerateRootCancel()
@@ -644,7 +643,7 @@ func (v *vault) Configure(config map[string]interface{}) error {
 				keyID = keyUnsealForID(i)
 			}
 
-			slog.Debug("retrieving key from kms service...")
+			slog.Info("retrieving key from kms service...")
 			k, err := v.keyStore.Get(keyID)
 			if err != nil {
 				return errors.Wrapf(err, "unable to get key '%s'", keyID)

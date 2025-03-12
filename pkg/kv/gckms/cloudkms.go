@@ -18,6 +18,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"log/slog"
+	"strings"
 
 	"emperror.dev/errors"
 	"golang.org/x/oauth2/google"
@@ -90,10 +92,14 @@ func (g *googleKms) Get(key string) ([]byte, error) {
 }
 
 func (g *googleKms) Set(key string, val []byte) error {
-	cipherText, err := g.encrypt(val)
-	if err != nil {
-		return errors.Wrap(err, "error setting data")
+	if !strings.HasPrefix(key, "keybase:") { //already encrypted by PGP key
+		slog.Info("Encrypting data with Google KMS")
+		cipherText, err := g.encrypt(val)
+		if err != nil {
+			return errors.Wrap(err, "error setting data")
+		}
+		return g.store.Set(key, cipherText)
 	}
-
-	return g.store.Set(key, cipherText)
+	slog.Info("Data is already encrypted with PGP key, skipping encryption with Google KMS")
+	return g.store.Set(key, val)
 }
